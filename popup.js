@@ -1,8 +1,13 @@
+// Track active tab
+let activeTabId = null;
+
+// Save Followers Button
 document.getElementById("saveFollowers").addEventListener("click", () => {
   const status = document.getElementById("saveStatus");
   status.style.display = "none";
 
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    activeTabId = tabs[0].id;
     chrome.scripting.executeScript(
       {
         target: { tabId: tabs[0].id },
@@ -13,7 +18,7 @@ document.getElementById("saveFollowers").addEventListener("click", () => {
           status.textContent = "Error: " + chrome.runtime.lastError.message;
           status.className = "error";
         } else {
-          status.textContent = "Saving followers... check console for progress";
+          status.textContent = "Saving followers... check console";
           status.className = "success";
         }
         status.style.display = "block";
@@ -22,6 +27,7 @@ document.getElementById("saveFollowers").addEventListener("click", () => {
   });
 });
 
+// Unfollow Button
 document
   .getElementById("unfollowNonFollowers")
   .addEventListener("click", () => {
@@ -29,6 +35,7 @@ document
     status.style.display = "none";
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      activeTabId = tabs[0].id;
       chrome.scripting.executeScript(
         {
           target: { tabId: tabs[0].id },
@@ -49,26 +56,28 @@ document
     });
   });
 
+// Stop Process Button
 document.getElementById("stopProcess").addEventListener("click", () => {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  if (activeTabId) {
     chrome.scripting.executeScript({
-      target: { tabId: tabs[0].id },
+      target: { tabId: activeTabId },
       func: () => {
-        if (window.stopSaving) window.stopSaving = true;
-        if (window.stopUnfollower) window.stopUnfollower = true;
-        console.log("Process stopped by user");
+        if (window.activeUnfollowProcess) {
+          window.stopUnfollower = true;
+          console.log("🛑 Process stopped by user");
+        }
       },
     });
-  });
+  }
 
   const status = document.getElementById("unfollowStatus");
-  status.textContent = "Process stopped. You may need to refresh the page.";
+  status.textContent = "Process stopped. No refresh needed.";
   status.className = "warning";
   status.style.display = "block";
   document.getElementById("stopProcess").disabled = true;
 });
 
-// Check if we have saved followers
+// Check for saved followers on startup
 chrome.storage.local.get(["savedFollowers"], (result) => {
   if (result.savedFollowers) {
     const status = document.getElementById("unfollowStatus");

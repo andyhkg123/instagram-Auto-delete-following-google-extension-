@@ -9,11 +9,12 @@
   let skipped = 0;
   let processedUsernames = new Set();
   window.stopUnfollower = false;
+  window.activeUnfollowProcess = true;
 
   // Helper functions
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  const getSavedFollowers = () => {
+  const getSavedFollowers = async () => {
     return new Promise((resolve) => {
       chrome.storage.local.get(["savedFollowers"], (result) => {
         resolve(result.savedFollowers || []);
@@ -21,26 +22,66 @@
     });
   };
 
+  // Process a single user
+  async function processUser(button, keepUsers) {
+    if (window.stopUnfollower) return false;
+
+    const root = button.closest("div.x9f619")?.parentElement?.parentElement;
+    if (!root) return false;
+
+    const username = [...root.querySelectorAll("span")]
+      .find((span) => /^[a-zA-Z0-9._]+$/.test(span.textContent.trim()))
+      ?.textContent.trim();
+
+    if (!username || processedUsernames.has(username)) return false;
+
+    processedUsernames.add(username);
+
+    if (keepUsers.includes(username)) {
+      console.log(`⏩ SKIPPING @${username}`);
+      root.style.backgroundColor = "rgba(144, 238, 144, 0.3)";
+      skipped++;
+      return true;
+    }
+
+    button.click();
+    await wait(500);
+
+    const confirmBtn = document.querySelector("button._a9--._a9-_");
+    if (confirmBtn) {
+      confirmBtn.click();
+      console.log(`✅ UNFOLLOWED @${username}`);
+      root.style.backgroundColor = "rgba(250, 128, 114, 0.3)";
+      unfollowed++;
+    }
+    await wait(UNFOLLOW_DELAY);
+    return true;
+  }
+
   // Main function
   async function unfollowNonFollowers() {
     try {
       console.log("🔍 Starting unfollow process...");
 
-      // 1. Load saved followers + original keep list
-      const savedFollowers = await getSavedFollowers();
-      const originalKeepUsers = [
-        "sycacu",
-        "drummer_malmalj",
-        "adriannalai" /* your original list */,
-      ];
+      // Load saved followers + original keep list
+      const [savedFollowers, originalKeepUsers] = await Promise.all([
+        getSavedFollowers(),
+        Promise.resolve([
+          "sycacu",
+          "drummer_malmalj",
+          "adriannalai",
+          "kamchuenwonggg",
+          // ... rest of your keep list ...
+        ]),
+      ]);
+
       const keepUsers = [...new Set([...originalKeepUsers, ...savedFollowers])];
       console.log(`🔒 ${keepUsers.length} accounts in keep list`);
 
-      // 2. Find Instagram UI elements
-      const dialog = document.querySelector('div[role="dialog"]');
-      if (!dialog) throw new Error("Not on following page");
-
-      const scrollable = [...dialog.querySelectorAll("div")].find((div) => {
+      // Find Instagram UI elements
+      const scrollable = [
+        ...document.querySelectorAll('div[role="dialog"] div'),
+      ].find((div) => {
         const style = getComputedStyle(div);
         return (
           (style.overflowY === "scroll" || style.overflowY === "auto") &&
@@ -49,53 +90,21 @@
       });
       if (!scrollable) throw new Error("No scrollable area found");
 
-      // 3. Process users
+      // Main processing loop
       let hasMore = true;
       while (hasMore && !window.stopUnfollower) {
-        const buttons = document.querySelectorAll(
-          "button._acan._acap._acat._aj1-._ap30"
+        const buttons = Array.from(
+          document.querySelectorAll("button._acan._acap._acat._aj1-._ap30")
         );
         let newUsersFound = false;
 
         for (const button of buttons) {
           if (window.stopUnfollower) break;
-
-          const root =
-            button.closest("div.x9f619")?.parentElement?.parentElement;
-          if (!root) continue;
-
-          const spans = root.querySelectorAll("span");
-          const usernameElement = [...spans].find((span) =>
-            /^[a-zA-Z0-9._]+$/.test(span.textContent.trim())
-          );
-          const username = usernameElement?.textContent.trim();
-
-          if (!username || processedUsernames.has(username)) continue;
-
-          processedUsernames.add(username);
-          newUsersFound = true;
-
-          if (keepUsers.includes(username)) {
-            console.log(`⏩ SKIPPING @${username} (in keep list)`);
-            root.style.backgroundColor = "lightgreen";
-            skipped++;
-          } else {
-            button.click();
-            await wait(500);
-
-            const confirmBtn = document.querySelector("button._a9--._a9-_");
-            if (confirmBtn) {
-              confirmBtn.click();
-              console.log(`✅ UNFOLLOWED @${username}`);
-              root.style.backgroundColor = "salmon";
-              unfollowed++;
-            }
-          }
-
-          await wait(UNFOLLOW_DELAY);
+          newUsersFound =
+            (await processUser(button, keepUsers)) || newUsersFound;
         }
 
-        // 4. Scroll for more if needed
+        // Scroll for more if needed
         if (!newUsersFound && !window.stopUnfollower) {
           const prevHeight = scrollable.scrollHeight;
           scrollable.scrollTop = scrollable.scrollHeight;
@@ -110,10 +119,7 @@
               break;
             }
           }
-
           hasMore = loaded;
-          if (!hasMore) console.log("⏹ Reached end of following list");
-          await wait(SCROLL_DELAY);
         }
       }
 
@@ -122,6 +128,9 @@
       console.error("❌ Unfollow Error:", error.message);
     } finally {
       window.stopUnfollower = false;
+      window.activeUnfollowProcess = false;
+      chrome.runtime.sendMessage({ type: "unfollowComplete" });
+      console.log("🔴 Process stopped");
     }
   }
 
