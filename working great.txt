@@ -1,0 +1,105 @@
+// YOUR COMPLETE KEEP LIST - NO CHANGES
+const keepUsers = [
+  "sycacu", "drummer_malmalj", "adriannalai", "kamchuenwonggg", 
+  "nellieyip", "richorsingle", "20.t___", "wtzatk", "_03010301_", 
+  "lkc_kelvinn", "andy135andy", "ilililoveee_cake", "hungkasung", 
+  "hwan.teaa", "monkeyx_o", "_kakiiiii_", "n_trammi", "elviscth", 
+  "simontamqq", "danny_lo_", "summeryishan", "samuelyau1", 
+  "immalmalj", "wildchild_shouseii", "kciyi", "txxyin", "cl.fung", 
+  "ar.miuu", "kiki0_827", "p3kk0t", "kwanchiiiii", "chloxoxo____", 
+  "_daily_just_do_it", "szeally_", "f.hct", "dlli0_", "cartoo.nn"
+];
+
+// TIMING - ADJUST THESE IF NEEDED
+const UNFOLLOW_DELAY = 1500; // Time between unfollow actions
+const SCROLL_DELAY = 2000;   // Time to wait after scrolling
+const LOAD_WAIT = 60000;     // Max time to wait for loading
+
+// TRACKING
+let unfollowed = 0, skipped = 0;
+let processedUsernames = new Set(); // Track processed users
+
+// SIMPLE WAIT FUNCTION
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+// MAIN FUNCTION
+async function unfollowNonKeepUsers() {
+  // 1. FIND FOLLOWERS DIALOG
+  const dialog = document.querySelector('div[role="dialog"]');
+  if (!dialog) return console.error("❌ Can't find followers dialog");
+  
+  // 2. FIND SCROLLABLE AREA
+  const scrollable = [...dialog.querySelectorAll('div')].find(div => {
+    const style = getComputedStyle(div);
+    return (style.overflowY === 'scroll' || style.overflowY === 'auto') && div.scrollHeight > div.clientHeight;
+  });
+  if (!scrollable) return console.error("❌ Can't find scrollable area");
+
+  let hasMore = true;
+  
+  while (hasMore) {
+    // 3. PROCESS CURRENT BATCH OF USERS
+    const buttons = document.querySelectorAll('button._acan._acap._acat._aj1-._ap30');
+    let newUsersFound = false;
+    
+    for (const button of buttons) {
+      const root = button.closest('div.x9f619')?.parentElement?.parentElement;
+      if (!root) continue;
+
+      // EXACTLY YOUR USERNAME EXTRACTION LOGIC
+      const spans = root.querySelectorAll('span');
+      const usernameElement = [...spans].find(span => /^[a-zA-Z0-9._]+$/.test(span.textContent.trim()));
+      const username = usernameElement?.textContent.trim();
+      if (!username || processedUsernames.has(username)) continue;
+
+      processedUsernames.add(username);
+      newUsersFound = true;
+
+      if (keepUsers.includes(username)) {
+        console.log(`⏩ SKIPPING @${username}`);
+        root.style.backgroundColor = 'lightgreen';
+        skipped++;
+      } else {
+        button.click();
+        await wait(500);
+        
+        const confirmBtn = document.querySelector('button._a9--._a9-_');
+        if (confirmBtn) {
+          confirmBtn.click();
+          console.log(`✅ UNFOLLOWED @${username}`);
+          root.style.backgroundColor = 'salmon';
+          unfollowed++;
+        }
+      }
+      
+      await wait(UNFOLLOW_DELAY);
+    }
+
+    // 4. SCROLL TO LOAD MORE ONLY IF WE FOUND NEW USERS
+    if (!newUsersFound) {
+      const prevHeight = scrollable.scrollHeight;
+      scrollable.scrollTop = scrollable.scrollHeight;
+      scrollable.dispatchEvent(new Event('scroll'));
+      
+      // 5. WAIT FOR LOADING
+      const start = Date.now();
+      let loaded = false;
+      while (Date.now() - start < LOAD_WAIT) {
+        await wait(500);
+        if (scrollable.scrollHeight > prevHeight) {
+          loaded = true;
+          break;
+        }
+      }
+      
+      hasMore = loaded;
+      if (!hasMore) console.log("⏹ Reached end of list");
+      await wait(SCROLL_DELAY);
+    }
+  }
+
+  console.log(`🎉 FINAL RESULT: Unfollowed ${unfollowed} | Skipped ${skipped}`);
+}
+
+// START THE PROCESS
+unfollowNonKeepUsers();
