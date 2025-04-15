@@ -2,7 +2,7 @@
   // Configuration
   const UNFOLLOW_DELAY = 1500;
   const SCROLL_DELAY = 2000;
-  const LOAD_WAIT = 60000;
+  const LOAD_WAIT = 360000;
 
   // State
   let unfollowed = 0;
